@@ -591,7 +591,7 @@ type voiceChannelJoinOp struct {
 //    cID     : Channel ID of the channel to join.
 //    mute    : If true, you will be set to muted upon joining.
 //    deaf    : If true, you will be set to deafened upon joining.
-func (s *Session) ChannelVoiceJoin(gID, cID string, mute, deaf bool) (voice *VoiceConnection, err error) {
+func (s *Session) ChannelVoiceJoin(gID, cID string, mute, deaf bool, h *VoiceSpeakingUpdateHandler) (voice *VoiceConnection, err error) {
 
 	s.log(LogInformational, "called")
 
@@ -612,6 +612,9 @@ func (s *Session) ChannelVoiceJoin(gID, cID string, mute, deaf bool) (voice *Voi
 	voice.deaf = deaf
 	voice.mute = mute
 	voice.session = s
+	if h != nil {
+		voice.voiceSpeakingUpdateHandlers = append(voice.voiceSpeakingUpdateHandlers, *h)
+	}
 	voice.Unlock()
 
 	err = s.ChannelVoiceJoinManual(gID, cID, mute, deaf)
