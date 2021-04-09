@@ -196,8 +196,7 @@ type PresencesReplace []*Presence
 // PresenceUpdate is the data for a PresenceUpdate event.
 type PresenceUpdate struct {
 	Presence
-	GuildID string   `json:"guild_id"`
-	Roles   []string `json:"roles"`
+	GuildID string `json:"guild_id"`
 }
 
 // Resumed is the data for a Resumed event.
@@ -252,6 +251,8 @@ type VoiceServerUpdate struct {
 // VoiceStateUpdate is the data for a VoiceStateUpdate event.
 type VoiceStateUpdate struct {
 	*VoiceState
+	// BeforeUpdate will be nil if the VoiceState was not previously cached in the state cache.
+	BeforeUpdate *VoiceState `json:"-"`
 }
 
 // MessageDeleteBulk is the data for a MessageDeleteBulk event
@@ -265,4 +266,9 @@ type MessageDeleteBulk struct {
 type WebhooksUpdate struct {
 	GuildID   string `json:"guild_id"`
 	ChannelID string `json:"channel_id"`
+}
+
+// InteractionCreate is the data for a InteractionCreate event
+type InteractionCreate struct {
+	*Interaction
 }

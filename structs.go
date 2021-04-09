@@ -14,6 +14,7 @@ package discordgo
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"sync"
@@ -151,7 +152,7 @@ type Integration struct {
 	SyncedAt          Timestamp          `json:"synced_at"`
 }
 
-//ExpireBehavior of Integration
+// ExpireBehavior of Integration
 // https://discord.com/developers/docs/resources/guild#integration-object-integration-expire-behaviors
 type ExpireBehavior int
 
@@ -322,12 +323,22 @@ type ChannelFollow struct {
 	WebhookID string `json:"webhook_id"`
 }
 
+// PermissionOverwriteType represents the type of resource on which
+// a permission overwrite acts.
+type PermissionOverwriteType int
+
+// The possible permission overwrite types.
+const (
+	PermissionOverwriteTypeRole PermissionOverwriteType = iota
+	PermissionOverwriteTypeMember
+)
+
 // A PermissionOverwrite holds permission overwrite data for a Channel
 type PermissionOverwrite struct {
-	ID    string `json:"id"`
-	Type  string `json:"type"`
-	Deny  int    `json:"deny"`
-	Allow int    `json:"allow"`
+	ID    string                  `json:"id"`
+	Type  PermissionOverwriteType `json:"type"`
+	Deny  int64                   `json:"deny,string"`
+	Allow int64                   `json:"allow,string"`
 }
 
 // Emoji struct holds data related to Emoji's
@@ -427,9 +438,6 @@ type Guild struct {
 	// The ID of the AFK voice channel.
 	AfkChannelID string `json:"afk_channel_id"`
 
-	// The ID of the embed channel ID, used for embed widgets.
-	EmbedChannelID string `json:"embed_channel_id"`
-
 	// The user ID of the owner of the guild.
 	OwnerID string `json:"owner_id"`
 
@@ -457,9 +465,6 @@ type Guild struct {
 
 	// The verification level required for the guild.
 	VerificationLevel VerificationLevel `json:"verification_level"`
-
-	// Whether the guild has embedding enabled.
-	EmbedEnabled bool `json:"embed_enabled"`
 
 	// Whether the guild is considered large. This is
 	// determined by a member threshold in the identify packet,
@@ -564,7 +569,41 @@ type Guild struct {
 	ApproximatePresenceCount int `json:"approximate_presence_count"`
 
 	// Permissions of our user
-	Permissions int `json:"permissions"`
+	Permissions int64 `json:"permissions,string"`
+}
+
+// A GuildPreview holds data related to a specific public Discord Guild, even if the user is not in the guild.
+type GuildPreview struct {
+	// The ID of the guild.
+	ID string `json:"id"`
+
+	// The name of the guild. (2–100 characters)
+	Name string `json:"name"`
+
+	// The hash of the guild's icon. Use Session.GuildIcon
+	// to retrieve the icon itself.
+	Icon string `json:"icon"`
+
+	// The hash of the guild's splash.
+	Splash string `json:"splash"`
+
+	// The hash of the guild's discovery splash.
+	DiscoverySplash string `json:"discovery_splash"`
+
+	// A list of the custom emojis present in the guild.
+	Emojis []*Emoji `json:"emojis"`
+
+	// The list of enabled guild features
+	Features []string `json:"features"`
+
+	// Approximate number of members in this guild, returned from the GET /guild/<id> endpoint when with_counts is true
+	ApproximateMemberCount int `json:"approximate_member_count"`
+
+	// Approximate number of non-offline members in this guild, returned from the GET /guild/<id> endpoint when with_counts is true
+	ApproximatePresenceCount int `json:"approximate_presence_count"`
+
+	// the description for the guild
+	Description string `json:"description"`
 }
 
 // MessageNotifications is the notification level for a guild
@@ -606,7 +645,7 @@ type UserGuild struct {
 	Name        string `json:"name"`
 	Icon        string `json:"icon"`
 	Owner       bool   `json:"owner"`
-	Permissions int    `json:"permissions"`
+	Permissions int64  `json:"permissions,string"`
 }
 
 // A GuildParams stores all the data needed to update discord guild settings
@@ -650,7 +689,7 @@ type Role struct {
 	// The permissions of the role on the guild (doesn't include channel overrides).
 	// This is a combination of bit masks; the presence of a certain permission can
 	// be checked by performing a bitwise AND between this int and the permission.
-	Permissions int `json:"permissions"`
+	Permissions int64 `json:"permissions,string"`
 }
 
 // Mention returns a string which mentions the role
@@ -688,39 +727,10 @@ type VoiceState struct {
 
 // A Presence stores the online, offline, or idle and game status of Guild members.
 type Presence struct {
-	User       *User    `json:"user"`
-	Status     Status   `json:"status"`
-	Game       *Game    `json:"game"`
-	Activities []*Game  `json:"activities"`
-	Nick       string   `json:"nick"`
-	Roles      []string `json:"roles"`
-	Since      *int     `json:"since"`
-}
-
-// GameType is the type of "game" (see GameType* consts) in the Game struct
-type GameType int
-
-// Valid GameType values
-const (
-	GameTypeGame GameType = iota
-	GameTypeStreaming
-	GameTypeListening
-	GameTypeWatching
-	GameTypeCustom
-)
-
-// A Game struct holds the name of the "playing .." game for a user
-type Game struct {
-	Name          string     `json:"name"`
-	Type          GameType   `json:"type"`
-	URL           string     `json:"url,omitempty"`
-	Details       string     `json:"details,omitempty"`
-	State         string     `json:"state,omitempty"`
-	TimeStamps    TimeStamps `json:"timestamps,omitempty"`
-	Assets        Assets     `json:"assets,omitempty"`
-	ApplicationID string     `json:"application_id,omitempty"`
-	Instance      int8       `json:"instance,omitempty"`
-	// TODO: Party and Secrets (unknown structure)
+	User       *User       `json:"user"`
+	Status     Status      `json:"status"`
+	Activities []*Activity `json:"activities"`
+	Since      *int        `json:"since"`
 }
 
 // A TimeStamps struct contains start and end times used in the rich presence "playing .." Game
@@ -778,6 +788,9 @@ type Member struct {
 
 	// When the user used their Nitro boost on the server
 	PremiumSince Timestamp `json:"premium_since"`
+
+	// Is true while the member hasn't accepted the membership screen.
+	Pending bool `json:"pending"`
 }
 
 // Mention creates a member mention
@@ -836,6 +849,26 @@ type TooManyRequests struct {
 	Bucket     string        `json:"bucket"`
 	Message    string        `json:"message"`
 	RetryAfter time.Duration `json:"retry_after"`
+}
+
+// UnmarshalJSON helps support translation of a milliseconds-based float
+// into a time.Duration on TooManyRequests.
+func (t *TooManyRequests) UnmarshalJSON(b []byte) error {
+	u := struct {
+		Bucket     string  `json:"bucket"`
+		Message    string  `json:"message"`
+		RetryAfter float64 `json:"retry_after"`
+	}{}
+	err := json.Unmarshal(b, &u)
+	if err != nil {
+		return err
+	}
+
+	t.Bucket = u.Bucket
+	t.Message = u.Message
+	whole, frac := math.Modf(u.RetryAfter)
+	t.RetryAfter = time.Duration(whole)*time.Second + time.Duration(frac*1000)*time.Millisecond
+	return nil
 }
 
 // A ReadState stores data on the read state of channels.
@@ -1054,39 +1087,6 @@ type APIErrorMessage struct {
 	Message string `json:"message"`
 }
 
-// Webhook stores the data for a webhook.
-type Webhook struct {
-	ID        string      `json:"id"`
-	Type      WebhookType `json:"type"`
-	GuildID   string      `json:"guild_id"`
-	ChannelID string      `json:"channel_id"`
-	User      *User       `json:"user"`
-	Name      string      `json:"name"`
-	Avatar    string      `json:"avatar"`
-	Token     string      `json:"token"`
-}
-
-// WebhookType is the type of Webhook (see WebhookType* consts) in the Webhook struct
-// https://discord.com/developers/docs/resources/webhook#webhook-object-webhook-types
-type WebhookType int
-
-// Valid WebhookType values
-const (
-	WebhookTypeIncoming WebhookType = iota
-	WebhookTypeChannelFollower
-)
-
-// WebhookParams is a struct for webhook params, used in the WebhookExecute command.
-type WebhookParams struct {
-	Content         string                  `json:"content,omitempty"`
-	Username        string                  `json:"username,omitempty"`
-	AvatarURL       string                  `json:"avatar_url,omitempty"`
-	TTS             bool                    `json:"tts,omitempty"`
-	File            string                  `json:"file,omitempty"`
-	Embeds          []*MessageEmbed         `json:"embeds,omitempty"`
-	AllowedMentions *MessageAllowedMentions `json:"allowed_mentions,omitempty"`
-}
-
 // MessageReaction stores the data for a message reaction.
 type MessageReaction struct {
 	UserID    string `json:"user_id"`
@@ -1114,9 +1114,9 @@ type GatewayStatusUpdate struct {
 // Activity defines the Activity sent with GatewayStatusUpdate
 // https://discord.com/developers/docs/topics/gateway#activity-object
 type Activity struct {
-	Name string
-	Type ActivityType
-	URL  string
+	Name string       `json:"name"`
+	Type ActivityType `json:"type"`
+	URL  string       `json:"url,omitempty"`
 }
 
 // ActivityType is the type of Activity (see ActivityType* consts) in the Activity struct
@@ -1125,7 +1125,7 @@ type ActivityType int
 
 // Valid ActivityType values
 const (
-	ActivityTypeGame GameType = iota
+	ActivityTypeGame ActivityType = iota
 	ActivityTypeStreaming
 	ActivityTypeListening
 	//	ActivityTypeWatching // not valid in this use case?
@@ -1142,7 +1142,7 @@ type Identify struct {
 	Shard              *[2]int             `json:"shard,omitempty"`
 	Presence           GatewayStatusUpdate `json:"presence,omitempty"`
 	GuildSubscriptions bool                `json:"guild_subscriptions"`
-	Intents            *Intent             `json:"intents,omitempty"`
+	Intents            Intent              `json:"intents"`
 }
 
 // IdentifyProperties contains the "properties" portion of an Identify packet
@@ -1250,6 +1250,7 @@ const (
 	ErrCodeUnknownUser        = 10013
 	ErrCodeUnknownEmoji       = 10014
 	ErrCodeUnknownWebhook     = 10015
+	ErrCodeUnknownBan         = 10026
 
 	ErrCodeBotsCannotUseEndpoint  = 20001
 	ErrCodeOnlyBotsCanUseEndpoint = 20002
@@ -1328,7 +1329,9 @@ const (
 	IntentsNone Intent = 0
 )
 
-// MakeIntent helps convert a gateway intent value for use in the Identify structure.
-func MakeIntent(intents Intent) *Intent {
-	return &intents
+// MakeIntent used to help convert a gateway intent value for use in the Identify structure;
+// this was useful to help support the use of a pointer type when intents were optional.
+// This is now a no-op, and is not necessary to use.
+func MakeIntent(intents Intent) Intent {
+	return intents
 }
